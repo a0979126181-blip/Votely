@@ -1,0 +1,5 @@
+{
+  "name": "Votely - Video Voting Platform",
+  "description": "A Pinterest-style video voting platform where users can upload videos, view submissions, and vote for their favorites.",
+  "requestFramePermissions": []
+}
