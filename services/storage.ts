@@ -17,12 +17,12 @@ const openDB = (): Promise<IDBDatabase> => {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
-      
+
       // Clean slate for v3 to ensure schema is perfect
       if (db.objectStoreNames.contains(STORE_VIDEOS)) {
         db.deleteObjectStore(STORE_VIDEOS);
       }
-      
+
       // Create fresh store with correct keyPath
       db.createObjectStore(STORE_VIDEOS, { keyPath: 'id' });
     };
@@ -74,7 +74,7 @@ export const saveVideo = async (video: Video, file?: File): Promise<void> => {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_VIDEOS, 'readwrite');
     const store = transaction.objectStore(STORE_VIDEOS);
-    
+
     const record = file ? { ...video, fileBlob: file } : video;
     store.put(record); // Use put instead of add to allow updates
 
@@ -97,7 +97,7 @@ export const toggleVideoVisibility = async (videoId: string, isHidden: boolean):
         store.put(video);
       }
     };
-    
+
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
   });
@@ -108,15 +108,15 @@ export const deleteVideo = async (videoId: string): Promise<void> => {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_VIDEOS, 'readwrite');
     const store = transaction.objectStore(STORE_VIDEOS);
-    
+
     store.delete(videoId);
-    
+
     transaction.oncomplete = () => {
       // Cleanup votes
       const votes = getStoredVotes();
       let votesChanged = false;
       const newVotes = { ...votes };
-      
+
       Object.keys(newVotes).forEach(userId => {
         if (newVotes[userId] === videoId) {
           delete newVotes[userId];
@@ -129,7 +129,7 @@ export const deleteVideo = async (videoId: string): Promise<void> => {
       }
       resolve();
     };
-    
+
     transaction.onerror = () => reject(transaction.error);
   });
 };
@@ -153,11 +153,11 @@ export const castVote = (userId: string, videoId: string): VoteMap => {
 };
 
 export const removeVote = (userId: string): VoteMap => {
-    const votes = getStoredVotes();
-    const newVotes = { ...votes };
-    delete newVotes[userId];
-    localStorage.setItem(KEY_VOTES, JSON.stringify(newVotes));
-    return newVotes;
+  const votes = getStoredVotes();
+  const newVotes = { ...votes };
+  delete newVotes[userId];
+  localStorage.setItem(KEY_VOTES, JSON.stringify(newVotes));
+  return newVotes;
 }
 
 export const getStoredUser = (): User | null => {
