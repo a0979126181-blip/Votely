@@ -75,12 +75,6 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
-            <div className="mt-3 p-3 bg-blue-50 rounded-lg text-xs text-blue-700 flex gap-2">
-              <Lock size={14} className="mt-0.5 shrink-0" />
-              <p>
-                <strong>Admin Access:</strong> Use <code>admin@votely.com</code> to access the voting dashboard.
-              </p>
-            </div>
           </div>
           <Button fullWidth type="submit" className="py-3 text-lg shadow-lg shadow-red-100">
             Enter Platform
