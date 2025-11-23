@@ -1,0 +1,23 @@
+# Build outputs
+dist
+node_modules
+temp
+
+# Environment files
+.env
+.env.local
+
+# SQLite database
+server/data
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+
+# Logs
+*.log
+npm-debug.log*

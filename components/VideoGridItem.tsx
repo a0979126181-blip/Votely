@@ -26,28 +26,22 @@ export const VideoGridItem: React.FC<VideoGridItemProps> = ({
   const canDelete = onDelete && (isAdmin || currentUserId === video.uploaderId);
 
   const handleToggleHide = (e: React.MouseEvent) => {
-    console.log('Hide button clicked!', video.id);
-    e.stopPropagation(); // Prevent triggering video detail view
-
-    console.log('Showing confirmation dialog...');
-    if (window.confirm('確定要隱藏這個影片嗎？隱藏後在主頁將看不到。')) {
-      console.log('User confirmed hiding, calling onToggleHide...');
-      onToggleHide?.(video);
-    } else {
-      console.log('User cancelled hiding');
+    e.stopPropagation();
+    if (onToggleHide) {
+      onToggleHide(video);
     }
   };
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm('確定要刪除這個影片嗎？')) {
-      onDelete?.(video);
+    if (onDelete) {
+      onDelete(video);
     }
   };
 
   return (
     <div
-      className="relative mb-4 break-inside-avoid rounded-xl overflow-hidden cursor-zoom-in group bg-gray-100"
+      className="group relative break-inside-avoid cursor-pointer bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100"
       onClick={() => onClick(video)}
     >
       {/* Image/Thumbnail */}

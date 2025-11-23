@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { ConfirmationModal } from './components/ConfirmationModal';
 import { User, Video, VoteMap, ViewState } from './types';
 import {
   getStoredVideos,
@@ -336,11 +337,10 @@ const VideoDetail: React.FC<{
                 <button
                   type="button"
                   onClick={(e) => {
-                    e.stopPropagation(); // Prevent any bubbling issues
-                    // Use simple confirm dialog
-                    if (window.confirm('Are you sure you want to delete this video?')) {
-                      onDelete(video);
-                    }
+                    e.stopPropagation();
+                    e.preventDefault();
+                    // Direct call, parent handles modal
+                    onDelete(video);
                   }}
                   className="relative z-20 p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
                   title="Delete Video"
@@ -386,7 +386,7 @@ const VideoDetail: React.FC<{
           </div>
         </div>
       </div>
-    </div>
+    </div >
   );
 };
 
@@ -493,21 +493,6 @@ const AdminPanel: React.FC<{
                     >
                       {video.isHidden ? <Eye size={16} /> : <EyeOff size={16} />}
                     </button>
-                    <button
-                      onClick={() => {
-                        const isPermanent = video.isHidden;
-                        const msg = isPermanent
-                          ? "WARNING: This will permanently delete the video from the database. This cannot be undone."
-                          : "Confirm delete video? It will be removed from the public feed.";
-
-                        if (window.confirm(msg)) {
-                          onDeleteVideo(video);
-                        }
-                      }}
-                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
                   </div>
                 </td>
               </tr>
@@ -590,8 +575,9 @@ const App: React.FC = () => {
   const [votes, setVotes] = useState<VoteMap>({});
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [videoToDelete, setVideoToDelete] = useState<Video | null>(null);
 
-  // Load initial data asynchronously (for IndexedDB)
+  // Load initial data asynchronously
   useEffect(() => {
     const init = async () => {
       try {
@@ -604,16 +590,29 @@ const App: React.FC = () => {
         const loadedVideos = await getStoredVideos();
         setVideos(loadedVideos);
 
-        const loadedVotes = getStoredVotes();
+        const loadedVotes = await getStoredVotes();
         setVotes(loadedVotes);
       } catch (err) {
         console.error("Failed to load data:", err);
+        alert("Failed to load data from server. Please check your connection.");
       } finally {
         setLoading(false);
       }
     };
     init();
   }, []);
+
+  // Helper to refresh data
+  const refreshData = async () => {
+    try {
+      const loadedVideos = await getStoredVideos();
+      setVideos(loadedVideos);
+      const loadedVotes = await getStoredVotes();
+      setVotes(loadedVotes);
+    } catch (error) {
+      console.error("Failed to refresh data:", error);
+    }
+  };
 
   const handleLogin = (loggedInUser: User) => {
     setUser(loggedInUser);
@@ -633,60 +632,45 @@ const App: React.FC = () => {
   };
 
   const handleUploadSuccess = async (newVideo: Video, file: File) => {
-    await saveVideo(newVideo, file);
-    // Reload from DB to ensure consistency
-    const updatedVideos = await getStoredVideos();
-    setVideos(updatedVideos);
-    setView('DASHBOARD');
+    try {
+      await saveVideo(newVideo, file);
+      await refreshData();
+      setView('DASHBOARD');
+    } catch (error) {
+      console.error("Upload failed:", error);
+      alert("Failed to upload video. Please try again.");
+    }
   };
 
   const handleToggleHide = async (video: Video) => {
     try {
       const newStatus = !video.isHidden;
       await toggleVideoVisibility(video.id, newStatus);
-      const updatedVideos = await getStoredVideos();
-      setVideos(updatedVideos);
+      await refreshData();
     } catch (error) {
       console.error("Failed to toggle visibility:", error);
       alert("Failed to update video status.");
     }
   };
 
-  const handleDeleteVideo = async (video: Video) => {
-    console.log('handleDeleteVideo called for video:', video.id, video.title);
+  // This function is passed to children to trigger the confirmation modal
+  const handleDeleteVideo = (video: Video) => {
+    setVideoToDelete(video);
+  };
+
+  // Actual deletion logic
+  const executeDeleteVideo = async () => {
+    if (!videoToDelete) return;
+    
     try {
-      const isSoftDelete = !video.isHidden;
-      console.log('isSoftDelete:', isSoftDelete);
-
-      if (isSoftDelete) {
-        // It's public, so Soft Delete (Hide)
-        console.log('Hiding video...');
-        await toggleVideoVisibility(video.id, true);
-      } else {
-        // It's hidden (Admin view trash can), so hard delete
-        console.log('Permanently deleting video...');
-        await deleteVideo(video.id);
-      }
-
-      // Refresh data logic
-      console.log('Refreshing videos from storage...');
-      const updatedVideos = await getStoredVideos();
-      console.log('Updated videos count:', updatedVideos.length);
-      setVideos(updatedVideos);
-
-      // If we were viewing this video in details, go back to dashboard
-      if (view === 'VIDEO_DETAIL' && selectedVideoId === video.id) {
-        // 1. Go back immediately
+      await deleteVideo(videoToDelete.id);
+      await refreshData();
+      setVideoToDelete(null);
+      
+      // If we're viewing the deleted video, go back to dashboard
+      if (selectedVideoId === videoToDelete.id) {
         setView('DASHBOARD');
-
-        // 2. Show feedback AFTER state change to prevent blocking
-        setTimeout(() => {
-          alert(isSoftDelete ? "Video has been removed." : "Video permanently deleted.");
-        }, 100);
-
-      } else {
-        // Admin panel view or other
-        alert(isSoftDelete ? "Video hidden from feed." : "Video deleted.");
+        setSelectedVideoId(null);
       }
     } catch (error) {
       console.error("Failed to delete video:", error);
@@ -694,126 +678,146 @@ const App: React.FC = () => {
     }
   };
 
-  const handleVote = useCallback(() => {
-    if (!user || !selectedVideoId) return;
+  const handleVote = useCallback(async () => {
+  if (!user || !selectedVideoId) return;
 
-    const currentVote = votes[user.id];
+  const currentVote = votes[user.id];
 
+  try {
     if (currentVote === selectedVideoId) {
       // Toggle off if clicking the same one
-      const updatedVotes = removeVote(user.id);
+      const updatedVotes = await removeVote(user.id);
       setVotes(updatedVotes);
     } else {
       // Vote for this one (replaces old vote)
-      const updatedVotes = castVote(user.id, selectedVideoId);
+      const updatedVotes = await castVote(user.id, selectedVideoId);
       setVotes(updatedVotes);
     }
-  }, [user, selectedVideoId, votes]);
-
-  const handleResetVotes = () => {
-    localStorage.removeItem('votely_votes');
-    setVotes({});
-  };
-
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading Platform...</div>;
+  } catch (error) {
+    console.error("Vote failed:", error);
+    alert("Failed to cast vote. Please try again.");
   }
+}, [user, selectedVideoId, votes]);
 
-  // Views Rendering Logic
-  if (!user || view === 'LOGIN') {
-    return <LoginScreen onLogin={handleLogin} />;
-  }
+const handleResetVotes = () => {
+  localStorage.removeItem('votely_votes');
+  setVotes({});
+};
 
-  const selectedVideo = videos.find(v => v.id === selectedVideoId);
+if (loading) {
+  return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading Platform...</div>;
+}
 
-  // Filter visible videos for dashboard
-  const visibleVideos = videos.filter(v => !v.isHidden);
+// Views Rendering Logic
+if (!user || view === 'LOGIN') {
+  return <LoginScreen onLogin={handleLogin} />;
+}
 
-  return (
-    <div className="min-h-screen bg-gray-50 pb-12">
-      <Navbar
-        user={user}
-        onLogout={handleLogout}
-        onUploadClick={() => setView('UPLOAD')}
-        onDashboardClick={() => setView('DASHBOARD')}
-        onAdminClick={() => setView('ADMIN')}
-      />
+const selectedVideo = videos.find(v => v.id === selectedVideoId);
 
-      {view === 'DASHBOARD' && (
-        <main className="max-w-7xl mx-auto px-4 py-8">
-          <div className="mb-8 text-center">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">Community Submissions</h2>
-            <p className="text-gray-600">Browse, watch, and vote for your favorite clips.</p>
-          </div>
+// Filter visible videos for dashboard
+const visibleVideos = videos.filter(v => !v.isHidden);
 
-          <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
-            {visibleVideos.map(video => (
-              <VideoGridItem
-                key={video.id}
-                video={video}
-                onClick={handleVideoClick}
-                isVoted={votes[user.id] === video.id}
-                currentUserId={user.id}
-                isAdmin={user.isAdmin}
-                onToggleHide={handleToggleHide}
-                onDelete={handleDeleteVideo}
-              />
-            ))}
-            {visibleVideos.length === 0 && (
-              <div className="col-span-full text-center py-12 text-gray-500 bg-white rounded-xl border border-gray-200 shadow-sm">
-                <VideoIcon className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-                <p className="text-lg font-medium text-gray-900">No videos found</p>
-                <p className="text-sm text-gray-500">Be the first to upload or check back later!</p>
-              </div>
-            )}
-          </div>
-        </main>
-      )}
+return (
+  <div className="min-h-screen bg-gray-50 pb-12">
+    <Navbar
+      user={user}
+      onLogout={handleLogout}
+      onUploadClick={() => setView('UPLOAD')}
+      onDashboardClick={() => setView('DASHBOARD')}
+      onAdminClick={() => setView('ADMIN')}
+    />
 
-      {view === 'UPLOAD' && (
-        <UploadScreen
-          user={user}
-          onCancel={() => setView('DASHBOARD')}
-          onSuccess={handleUploadSuccess}
-        />
-      )}
+    {view === 'DASHBOARD' && (
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        <div className="mb-8 text-center">
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Community Submissions</h2>
+          <p className="text-gray-600">Browse, watch, and vote for your favorite clips.</p>
+        </div>
 
-      {view === 'VIDEO_DETAIL' && selectedVideo && (
-        <VideoDetail
-          video={selectedVideo}
-          currentUser={user}
-          hasVotedForThis={votes[user.id] === selectedVideo.id}
-          onVote={handleVote}
-          onDelete={handleDeleteVideo}
-          onToggleHide={handleToggleHide}
-          onBack={() => setView('DASHBOARD')}
-        />
-      )}
-
-      {view === 'ADMIN' && (
-        user.isAdmin ? (
-          <AdminPanel
-            videos={videos}
-            votes={votes}
-            onResetVotes={handleResetVotes}
-            onDeleteVideo={handleDeleteVideo}
-            onToggleHide={handleToggleHide}
-          />
-        ) : (
-          <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-            <div className="bg-red-50 p-6 rounded-full mb-6">
-              <Lock size={48} className="text-red-400" />
+        <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
+          {visibleVideos.map(video => (
+            <VideoGridItem
+              key={video.id}
+              video={video}
+              onClick={handleVideoClick}
+              isVoted={votes[user.id] === video.id}
+              currentUserId={user.id}
+              isAdmin={user.isAdmin}
+              onToggleHide={handleToggleHide}
+              onDelete={handleDeleteVideo}
+            />
+          ))}
+          {visibleVideos.length === 0 && (
+            <div className="col-span-full text-center py-12 text-gray-500 bg-white rounded-xl border border-gray-200 shadow-sm">
+              <VideoIcon className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+              <p className="text-lg font-medium text-gray-900">No videos found</p>
+              <p className="text-sm text-gray-500">Be the first to upload or check back later!</p>
             </div>
-            <h3 className="text-2xl font-bold text-gray-900">Access Denied</h3>
-            <p className="text-gray-500 mt-2 max-w-md">
-              You do not have permission to view the admin panel. This area is restricted to event organizers.
-            </p>
-            <Button variant="outline" className="mt-8" onClick={() => setView('DASHBOARD')}>Return to Feed</Button>
+          )}
+        </div>
+      </main>
+    )}
+
+    {view === 'UPLOAD' && (
+      <UploadScreen
+        user={user}
+        onCancel={() => setView('DASHBOARD')}
+        onSuccess={handleUploadSuccess}
+      />
+    )}
+
+    {view === 'VIDEO_DETAIL' && selectedVideo && (
+      <VideoDetail
+        video={selectedVideo}
+        currentUser={user}
+        hasVotedForThis={votes[user.id] === selectedVideo.id}
+        onVote={handleVote}
+        onDelete={handleDeleteVideo}
+        onToggleHide={handleToggleHide}
+        onBack={() => setView('DASHBOARD')}
+      />
+    )}
+
+    {view === 'ADMIN' && (
+      user.isAdmin ? (
+        <AdminPanel
+          videos={videos}
+          votes={votes}
+          onResetVotes={handleResetVotes}
+          onDeleteVideo={handleDeleteVideo}
+          onToggleHide={handleToggleHide}
+        />
+      ) : (
+        <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+          <div className="bg-red-50 p-6 rounded-full mb-6">
+            <Lock size={48} className="text-red-400" />
           </div>
-        )
-      )}
-    </div>
-  );
+          <h3 className="text-2xl font-bold text-gray-900">Access Denied</h3>
+          <p className="text-gray-500 mt-2 max-w-md">
+            You do not have permission to view the admin panel. This area is restricted to event organizers.
+          </p>
+          <Button variant="outline" className="mt-8" onClick={() => setView('DASHBOARD')}>Return to Feed</Button>
+        </div>
+      )
+    )}
+    {/* Global Confirmation Modal */}
+    <ConfirmationModal
+      isOpen={!!videoToDelete}
+      title={videoToDelete?.isHidden ? "Permanently Delete Video?" : "Remove Video?"}
+      message={
+        videoToDelete?.isHidden
+          ? `Are you sure you want to permanently delete "${videoToDelete?.title}"? This action cannot be undone.`
+          : `Are you sure you want to remove "${videoToDelete?.title}" from the public feed? You can restore it later from the admin panel.`
+      }
+      confirmLabel={videoToDelete?.isHidden ? "Delete Permanently" : "Remove Video"}
+      cancelLabel="Cancel"
+      isDangerous={true}
+      onConfirm={executeDeleteVideo}
+      onCancel={() => setVideoToDelete(null)}
+    />
+  </div>
+);
 };
 
 export default App;

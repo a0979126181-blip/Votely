@@ -1,164 +1,127 @@
-
 import { Video, VoteMap, User } from '../types';
-import { MOCK_VIDEOS, MOCK_VOTES } from '../constants';
 
-const DB_NAME = 'VotelyDB';
-const DB_VERSION = 3; // Bumped to v3 for Hidden feature support
-const STORE_VIDEOS = 'videos';
-const KEY_VOTES = 'votely_votes';
-const KEY_USER = 'votely_user';
-const KEY_SEEDED = 'votely_seeded_v3'; // New seed key for v3
+// API base URL
+const API_URL = import.meta.env.VITE_API_URL || '';
 
-// --- IndexedDB Helpers ---
-
-const openDB = (): Promise<IDBDatabase> => {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-
-      // Clean slate for v3 to ensure schema is perfect
-      if (db.objectStoreNames.contains(STORE_VIDEOS)) {
-        db.deleteObjectStore(STORE_VIDEOS);
-      }
-
-      // Create fresh store with correct keyPath
-      db.createObjectStore(STORE_VIDEOS, { keyPath: 'id' });
-    };
-
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-};
-
-// --- Video Operations (Async with IndexedDB) ---
+// === Video Operations ===
 
 export const getStoredVideos = async (): Promise<Video[]> => {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_VIDEOS, 'readwrite');
-    const store = transaction.objectStore(STORE_VIDEOS);
-    const countRequest = store.count();
-
-    countRequest.onsuccess = () => {
-      const hasSeeded = localStorage.getItem(KEY_SEEDED);
-
-      if (countRequest.result === 0 && !hasSeeded) {
-        // Seed with MOCK_VIDEOS
-        MOCK_VIDEOS.forEach(video => store.add(video));
-        localStorage.setItem(KEY_SEEDED, 'true');
-        resolve(MOCK_VIDEOS);
-      } else {
-        const getAllRequest = store.getAll();
-        getAllRequest.onsuccess = () => {
-          const records = getAllRequest.result;
-          const videos: Video[] = records.map((record: any) => {
-            if (record.fileBlob instanceof Blob) {
-              const newUrl = URL.createObjectURL(record.fileBlob);
-              return { ...record, videoUrl: newUrl };
-            }
-            return record;
-          });
-          resolve(videos);
-        };
-        getAllRequest.onerror = () => reject(getAllRequest.error);
-      }
-    };
-    countRequest.onerror = () => reject(countRequest.error);
-  });
+  const response = await fetch(`${API_URL}/api/videos`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch videos');
+  }
+  const videos = await response.json();
+  return videos.map((v: any) => ({
+    ...v,
+    videoUrl: v.videoPath // Use videoPath as videoUrl
+  }));
 };
 
-export const saveVideo = async (video: Video, file?: File): Promise<void> => {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_VIDEOS, 'readwrite');
-    const store = transaction.objectStore(STORE_VIDEOS);
+export const saveVideo = async (video: Video, file: File): Promise<void> => {
+  console.log('🚀 saveVideo called with file:', file.name, file.size, 'bytes');
+  console.log('📝 API_URL:', API_URL);
+  console.log('📦 Video data:', { title: video.title, uploaderId: video.uploaderId, uploaderName: video.uploaderName });
 
-    const record = file ? { ...video, fileBlob: file } : video;
-    store.put(record); // Use put instead of add to allow updates
+  const formData = new FormData();
+  formData.append('video', file);
+  formData.append('title', video.title);
+  formData.append('description', video.description || '');
+  formData.append('uploaderId', video.uploaderId);
+  formData.append('uploaderName', video.uploaderName);
+  formData.append('thumbnailUrl', video.thumbnailUrl);
 
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-  });
+  const url = `${API_URL}/api/videos`;
+  console.log('📡 Sending POST to:', url);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData
+    });
+
+    console.log('📬 Response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Upload failed:', response.status, errorText);
+      throw new Error(`Failed to upload video: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ Upload successful:', result);
+  } catch (error) {
+    console.error('❌ Fetch error:', error);
+    throw error;
+  }
 };
 
 export const toggleVideoVisibility = async (videoId: string, isHidden: boolean): Promise<void> => {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_VIDEOS, 'readwrite');
-    const store = transaction.objectStore(STORE_VIDEOS);
-    const getRequest = store.get(videoId);
-
-    getRequest.onsuccess = () => {
-      const video = getRequest.result;
-      if (video) {
-        video.isHidden = isHidden;
-        store.put(video);
-      }
-    };
-
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
+  const response = await fetch(`${API_URL}/api/videos/${videoId}/visibility`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ isHidden })
   });
+
+  if (!response.ok) {
+    throw new Error('Failed to toggle video visibility');
+  }
 };
 
 export const deleteVideo = async (videoId: string): Promise<void> => {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_VIDEOS, 'readwrite');
-    const store = transaction.objectStore(STORE_VIDEOS);
-
-    store.delete(videoId);
-
-    transaction.oncomplete = () => {
-      // Cleanup votes
-      const votes = getStoredVotes();
-      let votesChanged = false;
-      const newVotes = { ...votes };
-
-      Object.keys(newVotes).forEach(userId => {
-        if (newVotes[userId] === videoId) {
-          delete newVotes[userId];
-          votesChanged = true;
-        }
-      });
-
-      if (votesChanged) {
-        localStorage.setItem(KEY_VOTES, JSON.stringify(newVotes));
-      }
-      resolve();
-    };
-
-    transaction.onerror = () => reject(transaction.error);
+  const response = await fetch(`${API_URL}/api/videos/${videoId}`, {
+    method: 'DELETE'
   });
-};
 
-// --- User & Vote Operations ---
-
-export const getStoredVotes = (): VoteMap => {
-  const stored = localStorage.getItem(KEY_VOTES);
-  if (!stored) {
-    localStorage.setItem(KEY_VOTES, JSON.stringify(MOCK_VOTES));
-    return MOCK_VOTES;
+  if (!response.ok) {
+    throw new Error('Failed to delete video');
   }
-  return JSON.parse(stored);
 };
 
-export const castVote = (userId: string, videoId: string): VoteMap => {
-  const votes = getStoredVotes();
-  const newVotes = { ...votes, [userId]: videoId };
-  localStorage.setItem(KEY_VOTES, JSON.stringify(newVotes));
-  return newVotes;
+// === Vote Operations ===
+
+export const getStoredVotes = async (): Promise<VoteMap> => {
+  const response = await fetch(`${API_URL}/api/votes`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch votes');
+  }
+  return response.json();
 };
 
-export const removeVote = (userId: string): VoteMap => {
-  const votes = getStoredVotes();
-  const newVotes = { ...votes };
-  delete newVotes[userId];
-  localStorage.setItem(KEY_VOTES, JSON.stringify(newVotes));
-  return newVotes;
-}
+export const castVote = async (userId: string, videoId: string): Promise<VoteMap> => {
+  const response = await fetch(`${API_URL}/api/votes`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ userId, videoId })
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to cast vote');
+  }
+
+  // Fetch updated votes
+  return getStoredVotes();
+};
+
+export const removeVote = async (userId: string): Promise<VoteMap> => {
+  const response = await fetch(`${API_URL}/api/votes/${userId}`, {
+    method: 'DELETE'
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to remove vote');
+  }
+
+  // Fetch updated votes
+  return getStoredVotes();
+};
+
+// === User Session (still using localStorage) ===
+
+const KEY_USER = 'votely_user';
 
 export const getStoredUser = (): User | null => {
   const stored = localStorage.getItem(KEY_USER);
