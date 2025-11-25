@@ -23,21 +23,20 @@ import { Heart, Upload as UploadIcon, Video as VideoIcon, Lock, BarChart3, Arrow
 
 // 1. Login Component
 const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim()) return;
+    if (!email.trim()) return;
 
     // Admin logic: strict check for specific email
     const isAdmin = email.toLowerCase() === 'admin@votely.com';
 
     const newUser: User = {
       id: email.toLowerCase().replace(/[^a-z0-9]/g, ''),
-      name,
+      name: email, // Use email as the display name
       email,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
       isAdmin
     };
     onLogin(newUser);
@@ -54,17 +53,6 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
           <p className="text-gray-500 mt-2">Video Contest & Voting Platform</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Display Name</label>
-            <input
-              type="text"
-              required
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all"
-              placeholder="e.g. Alex"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
             <input
