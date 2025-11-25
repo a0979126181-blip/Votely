@@ -1,120 +1,143 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
+const mysql = require('mysql2/promise');
 
-// Database file path (will be on GCS FUSE mount in Cloud Run)
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'votely.db');
-
-// Ensure data directory exists
-const dataDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-}
-
-// Initialize database
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL'); // Better performance for concurrent access
-
-// Create tables
-db.exec(`
-  CREATE TABLE IF NOT EXISTS videos (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    description TEXT,
-    videoPath TEXT NOT NULL,
-    thumbnailUrl TEXT NOT NULL,
-    uploaderId TEXT NOT NULL,
-    uploaderName TEXT NOT NULL,
-    createdAt INTEGER NOT NULL,
-    isHidden INTEGER DEFAULT 0
-  );
-
-  CREATE TABLE IF NOT EXISTS votes (
-    userId TEXT PRIMARY KEY,
-    videoId TEXT NOT NULL,
-    timestamp INTEGER NOT NULL
-  );
-`);
-
-// Video operations
-const videoQueries = {
-    getAll: db.prepare('SELECT * FROM videos ORDER BY createdAt DESC'),
-    getById: db.prepare('SELECT * FROM videos WHERE id = ?'),
-    insert: db.prepare(`
-    INSERT INTO videos (id, title, description, videoPath, thumbnailUrl, uploaderId, uploaderName, createdAt, isHidden)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `),
-    updateVisibility: db.prepare('UPDATE videos SET isHidden = ? WHERE id = ?'),
-    delete: db.prepare('DELETE FROM videos WHERE id = ?')
+// Database configuration
+const dbConfig = {
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'votely',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
 };
 
-// Vote operations
-const voteQueries = {
-    getAll: db.prepare('SELECT * FROM votes'),
-    getByUser: db.prepare('SELECT * FROM votes WHERE userId = ?'),
-    insert: db.prepare('INSERT OR REPLACE INTO votes (userId, videoId, timestamp) VALUES (?, ?, ?)'),
-    delete: db.prepare('DELETE FROM votes WHERE userId = ?'),
-    deleteByVideo: db.prepare('DELETE FROM votes WHERE videoId = ?')
+// Initialize pool
+const pool = mysql.createPool(dbConfig);
+
+// Initialize database tables
+const init = async () => {
+    try {
+        const connection = await pool.getConnection();
+        try {
+            await connection.query(`
+                CREATE TABLE IF NOT EXISTS videos (
+                    id VARCHAR(255) PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    videoPath TEXT NOT NULL,
+                    thumbnailUrl TEXT NOT NULL,
+                    uploaderId VARCHAR(255) NOT NULL,
+                    uploaderName VARCHAR(255) NOT NULL,
+                    createdAt BIGINT NOT NULL,
+                    isHidden TINYINT(1) DEFAULT 0
+                )
+            `);
+
+            await connection.query(`
+                CREATE TABLE IF NOT EXISTS votes (
+                    userId VARCHAR(255) PRIMARY KEY,
+                    videoId VARCHAR(255) NOT NULL,
+                    timestamp BIGINT NOT NULL
+                )
+            `);
+            console.log('✅ Database tables initialized');
+        } finally {
+            connection.release();
+        }
+    } catch (error) {
+        console.error('❌ Database initialization failed:', error);
+        // Don't exit process here, let the main application handle it or retry
+    }
 };
+
+// Initialize immediately
+init();
 
 module.exports = {
     // Videos
-    getAllVideos: () => videoQueries.getAll.all().map(v => ({
-        ...v,
-        isHidden: Boolean(v.isHidden)
-    })),
+    getAllVideos: async () => {
+        const [rows] = await pool.query('SELECT * FROM videos ORDER BY createdAt DESC');
+        return rows.map(v => ({
+            ...v,
+            isHidden: Boolean(v.isHidden)
+        }));
+    },
 
-    getVideoById: (id) => {
-        const video = videoQueries.getById.get(id);
+    getVideoById: async (id) => {
+        const [rows] = await pool.query('SELECT * FROM videos WHERE id = ?', [id]);
+        const video = rows[0];
         if (video) {
             video.isHidden = Boolean(video.isHidden);
         }
         return video;
     },
 
-    createVideo: (video) => {
-        videoQueries.insert.run(
-            video.id,
-            video.title,
-            video.description || '',
-            video.videoPath,
-            video.thumbnailUrl,
-            video.uploaderId,
-            video.uploaderName,
-            video.createdAt,
-            video.isHidden ? 1 : 0
+    createVideo: async (video) => {
+        await pool.query(
+            `INSERT INTO videos (id, title, description, videoPath, thumbnailUrl, uploaderId, uploaderName, createdAt, isHidden)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                video.id,
+                video.title,
+                video.description || '',
+                video.videoPath,
+                video.thumbnailUrl,
+                video.uploaderId,
+                video.uploaderName,
+                video.createdAt,
+                video.isHidden ? 1 : 0
+            ]
         );
         return video;
     },
 
-    updateVideoVisibility: (id, isHidden) => {
-        videoQueries.updateVisibility.run(isHidden ? 1 : 0, id);
+    updateVideoVisibility: async (id, isHidden) => {
+        await pool.query('UPDATE videos SET isHidden = ? WHERE id = ?', [isHidden ? 1 : 0, id]);
     },
 
-    deleteVideo: (id) => {
-        // Delete video and related votes
-        voteQueries.deleteByVideo.run(id);
-        videoQueries.delete.run(id);
+    deleteVideo: async (id) => {
+        const connection = await pool.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            // Delete related votes first
+            await connection.query('DELETE FROM votes WHERE videoId = ?', [id]);
+            // Delete video
+            await connection.query('DELETE FROM videos WHERE id = ?', [id]);
+
+            await connection.commit();
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
     },
 
     // Votes
-    getAllVotes: () => {
-        const votes = voteQueries.getAll.all();
+    getAllVotes: async () => {
+        const [rows] = await pool.query('SELECT * FROM votes');
         // Convert to { userId: videoId } format
-        return votes.reduce((acc, vote) => {
+        return rows.reduce((acc, vote) => {
             acc[vote.userId] = vote.videoId;
             return acc;
         }, {});
     },
 
-    castVote: (userId, videoId) => {
-        voteQueries.insert.run(userId, videoId, Date.now());
+    castVote: async (userId, videoId) => {
+        // Using INSERT ... ON DUPLICATE KEY UPDATE for MySQL equivalent of INSERT OR REPLACE
+        // Or just REPLACE INTO if we don't care about overhead, but ON DUPLICATE is usually better.
+        // However, the original logic was INSERT OR REPLACE.
+        // Let's use REPLACE INTO for simplicity and matching behavior.
+        await pool.query('REPLACE INTO votes (userId, videoId, timestamp) VALUES (?, ?, ?)', [userId, videoId, Date.now()]);
     },
 
-    removeVote: (userId) => {
-        voteQueries.delete.run(userId);
+    removeVote: async (userId) => {
+        await pool.query('DELETE FROM votes WHERE userId = ?', [userId]);
     },
 
     // Cleanup
-    close: () => db.close()
+    close: async () => {
+        await pool.end();
+    }
 };

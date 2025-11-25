@@ -38,9 +38,9 @@ initBucket().catch(console.error);
 // ===== API Routes ====
 
 // Get all videos
-app.get('/api/videos', (req, res) => {
+app.get('/api/videos', async (req, res) => {
     try {
-        const videos = db.getAllVideos();
+        const videos = await db.getAllVideos();
         res.json(videos);
     } catch (error) {
         console.error('Error fetching videos:', error);
@@ -96,7 +96,7 @@ app.post('/api/videos', upload.single('video'), async (req, res) => {
             isHidden: false
         };
 
-        db.createVideo(video);
+        await db.createVideo(video);
         console.log('💾 Video saved to database:', video.id);
 
         // Return video with full URL
@@ -112,12 +112,12 @@ app.post('/api/videos', upload.single('video'), async (req, res) => {
 });
 
 // Toggle video visibility
-app.patch('/api/videos/:id/visibility', (req, res) => {
+app.patch('/api/videos/:id/visibility', async (req, res) => {
     try {
         const { id } = req.params;
         const { isHidden } = req.body;
 
-        db.updateVideoVisibility(id, isHidden);
+        await db.updateVideoVisibility(id, isHidden);
         res.json({ success: true });
     } catch (error) {
         console.error('Error updating visibility:', error);
@@ -129,7 +129,7 @@ app.patch('/api/videos/:id/visibility', (req, res) => {
 app.delete('/api/videos/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const video = db.getVideoById(id);
+        const video = await db.getVideoById(id);
 
         if (!video) {
             return res.status(404).json({ error: 'Video not found' });
@@ -139,7 +139,7 @@ app.delete('/api/videos/:id', async (req, res) => {
         await deleteVideo(video.videoPath);
 
         // Delete from database
-        db.deleteVideo(id);
+        await db.deleteVideo(id);
 
         res.json({ success: true });
     } catch (error) {
@@ -149,9 +149,9 @@ app.delete('/api/videos/:id', async (req, res) => {
 });
 
 // Get all votes
-app.get('/api/votes', (req, res) => {
+app.get('/api/votes', async (req, res) => {
     try {
-        const votes = db.getAllVotes();
+        const votes = await db.getAllVotes();
         res.json(votes);
     } catch (error) {
         console.error('Error fetching votes:', error);
@@ -160,7 +160,7 @@ app.get('/api/votes', (req, res) => {
 });
 
 // Cast vote
-app.post('/api/votes', (req, res) => {
+app.post('/api/votes', async (req, res) => {
     try {
         const { userId, videoId } = req.body;
 
@@ -168,7 +168,7 @@ app.post('/api/votes', (req, res) => {
             return res.status(400).json({ error: 'Missing userId or videoId' });
         }
 
-        db.castVote(userId, videoId);
+        await db.castVote(userId, videoId);
         res.json({ success: true });
     } catch (error) {
         console.error('Error casting vote:', error);
@@ -177,10 +177,10 @@ app.post('/api/votes', (req, res) => {
 });
 
 // Remove vote
-app.delete('/api/votes/:userId', (req, res) => {
+app.delete('/api/votes/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
-        db.removeVote(userId);
+        await db.removeVote(userId);
         res.json({ success: true });
     } catch (error) {
         console.error('Error removing vote:', error);
