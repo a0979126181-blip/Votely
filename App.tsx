@@ -402,10 +402,14 @@ const AdminPanel: React.FC<{
     votersByVideo[v.id] = [];
   });
 
-  Object.entries(votes).forEach(([userId, videoId]) => {
+  Object.entries(votes).forEach(([userId, voteData]) => {
+    const voteDataAny = voteData as any;
+    const videoId = typeof voteDataAny === 'string' ? voteDataAny : voteDataAny.videoId;
+    const userEmail = typeof voteDataAny === 'string' ? 'Unknown' : (voteDataAny.userEmail || 'Unknown');
+
     if (voteCounts[videoId] !== undefined) {
       voteCounts[videoId]++;
-      votersByVideo[videoId].push(userId);
+      votersByVideo[videoId].push(userEmail);
     }
   });
 
@@ -474,9 +478,26 @@ const AdminPanel: React.FC<{
                   </div>
                 </td>
                 <td className="px-6 py-4 text-center">
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${voteCounts[video.id] > 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-400'}`}>
-                    {voteCounts[video.id]}
-                  </span>
+                  <div className="relative group inline-block">
+                    <span
+                      className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold cursor-help ${voteCounts[video.id] > 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-400'}`}
+                      title={votersByVideo[video.id].length > 0 ? `Voters:\n${votersByVideo[video.id].join('\n')}` : 'No votes yet'}
+                    >
+                      {voteCounts[video.id]}
+                    </span>
+                    {/* Hover List for better visibility */}
+                    {votersByVideo[video.id].length > 0 && (
+                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block w-max max-w-[200px] bg-gray-800 text-white text-xs rounded p-2 z-50 shadow-xl text-left">
+                        <p className="font-semibold border-b border-gray-600 pb-1 mb-1 text-gray-300">Voters:</p>
+                        <ul className="max-h-[150px] overflow-y-auto custom-scrollbar">
+                          {votersByVideo[video.id].map((email, i) => (
+                            <li key={i} className="truncate py-0.5">{email}</li>
+                          ))}
+                        </ul>
+                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+                      </div>
+                    )}
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex items-center justify-end gap-2">
@@ -676,15 +697,16 @@ const App: React.FC = () => {
     if (!user || !selectedVideoId) return;
 
     const currentVote = votes[user.id];
+    const currentVideoId = typeof currentVote === 'string' ? currentVote : currentVote?.videoId;
 
     try {
-      if (currentVote === selectedVideoId) {
+      if (currentVideoId === selectedVideoId) {
         // Toggle off if clicking the same one
         const updatedVotes = await removeVote(user.id);
         setVotes(updatedVotes);
       } else {
         // Vote for this one (replaces old vote)
-        const updatedVotes = await castVote(user.id, selectedVideoId);
+        const updatedVotes = await castVote(user.id, selectedVideoId, user.email);
         setVotes(updatedVotes);
       }
     } catch (error) {
@@ -735,7 +757,7 @@ const App: React.FC = () => {
                 key={video.id}
                 video={video}
                 onClick={handleVideoClick}
-                isVoted={votes[user.id] === video.id}
+                isVoted={(typeof votes[user.id] === 'string' ? votes[user.id] : votes[user.id]?.videoId) === video.id}
                 currentUserId={user.id}
                 isAdmin={user.isAdmin}
                 onToggleHide={handleToggleHide}
@@ -765,7 +787,7 @@ const App: React.FC = () => {
         <VideoDetail
           video={selectedVideo}
           currentUser={user}
-          hasVotedForThis={votes[user.id] === selectedVideo.id}
+          hasVotedForThis={(typeof votes[user.id] === 'string' ? votes[user.id] : votes[user.id]?.videoId) === selectedVideo.id}
           onVote={handleVote}
           onDelete={handleDeleteVideo}
           onToggleHide={handleToggleHide}

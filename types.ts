@@ -19,6 +19,6 @@ export interface Video {
   isHidden?: boolean; // New property for soft delete/hiding
 }
 
-export type VoteMap = Record<string, string>; // UserId -> VideoId (One vote per user)
+export type VoteMap = Record<string, { videoId: string; userEmail?: string }>; // UserId -> Vote Details
 
 export type ViewState = 'LOGIN' | 'DASHBOARD' | 'VIDEO_DETAIL' | 'UPLOAD' | 'ADMIN';

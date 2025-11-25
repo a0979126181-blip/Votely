@@ -162,13 +162,13 @@ app.get('/api/votes', async (req, res) => {
 // Cast vote
 app.post('/api/votes', async (req, res) => {
     try {
-        const { userId, videoId } = req.body;
+        const { userId, videoId, userEmail } = req.body;
 
         if (!userId || !videoId) {
             return res.status(400).json({ error: 'Missing userId or videoId' });
         }
 
-        await db.castVote(userId, videoId);
+        await db.castVote(userId, videoId, userEmail);
         res.json({ success: true });
     } catch (error) {
         console.error('Error casting vote:', error);

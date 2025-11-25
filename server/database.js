@@ -37,9 +37,21 @@ const init = async () => {
                 CREATE TABLE IF NOT EXISTS votes (
                     userId VARCHAR(255) PRIMARY KEY,
                     videoId VARCHAR(255) NOT NULL,
+                    userEmail VARCHAR(255),
                     timestamp BIGINT NOT NULL
                 )
             `);
+
+            // Migration: Add userEmail column if it doesn't exist
+            try {
+                await connection.query('ALTER TABLE votes ADD COLUMN userEmail VARCHAR(255)');
+                console.log('✅ Added userEmail column to votes table');
+            } catch (err) {
+                // Ignore error if column already exists
+                if (err.code !== 'ER_DUP_FIELDNAME') {
+                    console.log('ℹ️ userEmail column likely already exists or other error:', err.message);
+                }
+            }
             console.log('✅ Database tables initialized');
         } finally {
             connection.release();
@@ -117,19 +129,22 @@ module.exports = {
     // Votes
     getAllVotes: async () => {
         const [rows] = await pool.query('SELECT * FROM votes');
-        // Convert to { userId: videoId } format
+        // Convert to { userId: { videoId, userEmail } } format
         return rows.reduce((acc, vote) => {
-            acc[vote.userId] = vote.videoId;
+            acc[vote.userId] = {
+                videoId: vote.videoId,
+                userEmail: vote.userEmail
+            };
             return acc;
         }, {});
     },
 
-    castVote: async (userId, videoId) => {
+    castVote: async (userId, videoId, userEmail) => {
         // Using INSERT ... ON DUPLICATE KEY UPDATE for MySQL equivalent of INSERT OR REPLACE
         // Or just REPLACE INTO if we don't care about overhead, but ON DUPLICATE is usually better.
         // However, the original logic was INSERT OR REPLACE.
         // Let's use REPLACE INTO for simplicity and matching behavior.
-        await pool.query('REPLACE INTO votes (userId, videoId, timestamp) VALUES (?, ?, ?)', [userId, videoId, Date.now()]);
+        await pool.query('REPLACE INTO votes (userId, videoId, userEmail, timestamp) VALUES (?, ?, ?, ?)', [userId, videoId, userEmail, Date.now()]);
     },
 
     removeVote: async (userId) => {

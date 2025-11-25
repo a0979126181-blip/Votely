@@ -89,13 +89,13 @@ export const getStoredVotes = async (): Promise<VoteMap> => {
   return response.json();
 };
 
-export const castVote = async (userId: string, videoId: string): Promise<VoteMap> => {
+export const castVote = async (userId: string, videoId: string, userEmail?: string): Promise<VoteMap> => {
   const response = await fetch(`${API_URL}/api/votes`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ userId, videoId })
+    body: JSON.stringify({ userId, videoId, userEmail })
   });
 
   if (!response.ok) {
