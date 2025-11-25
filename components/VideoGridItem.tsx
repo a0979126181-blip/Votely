@@ -23,7 +23,7 @@ export const VideoGridItem: React.FC<VideoGridItemProps> = ({
 }) => {
   // Only admin can hide videos directly (users use delete which soft-deletes)
   const canHide = onToggleHide && isAdmin;
-  const canDelete = onDelete && (isAdmin || currentUserId === video.uploaderId);
+  const canDelete = onDelete && isAdmin;
 
   const handleToggleHide = (e: React.MouseEvent) => {
     e.stopPropagation();
