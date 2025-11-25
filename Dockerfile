@@ -22,11 +22,14 @@ FROM node:18-slim
 
 WORKDIR /app
 
-# Install gcsfuse for mounting Cloud Storage
+# Install gcsfuse and build dependencies for native modules
 RUN apt-get update && apt-get install -y \
     curl \
     gnupg \
     lsb-release \
+    python3 \
+    make \
+    g++ \
     && echo "deb http://packages.cloud.google.com/apt gcsfuse-$(lsb_release -c -s) main" | tee /etc/apt/sources.list.d/gcsfuse.list \
     && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
     && apt-get update \
@@ -38,7 +41,8 @@ RUN apt-get update && apt-get install -y \
 COPY package*.json ./
 
 # Install production dependencies only
-RUN npm ci --only=production
+RUN npm ci --only=production \
+    && apt-get purge -y --auto-remove python3 make g++
 
 # Copy server code
 COPY server ./server
