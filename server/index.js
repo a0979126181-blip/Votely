@@ -20,7 +20,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Serve l
 const upload = multer({
     dest: path.join(__dirname, '../temp/'),
     limits: {
-        fileSize: 100 * 1024 * 1024 // 100MB limit
+        fileSize: 500 * 1024 * 1024 // 500MB limit
     },
     fileFilter: (req, file, cb) => {
         const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
