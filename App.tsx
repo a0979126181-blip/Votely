@@ -55,7 +55,8 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
           position: 'fixed',
           width: '100vw',
           height: '100vh',
-          objectFit: 'cover'
+          objectFit: 'cover',
+          filter: 'blur(0.5px) brightness(0.6)'
         }}
       >
         <source src="/login-background.mp4" type="video/mp4" />
@@ -66,17 +67,17 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
       <div className="absolute inset-0 bg-black/30"></div>
 
       {/* Login Card with Glassmorphism */}
-      <div className="max-w-md w-full backdrop-blur-xl bg-white/90 rounded-2xl shadow-2xl p-8 border border-white/20 relative z-10">
+      <div className="max-w-md w-full backdrop-blur-xl bg-white/20 rounded-2xl shadow-2xl p-8 border border-white/20 relative z-10">
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4 shadow-red-200 shadow-lg">
             V
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Votely</h1>
-          <p className="text-gray-600 mt-2">Video Contest & Voting Platform</p>
+          <h1 className="text-2xl font-bold text-white">Votely</h1>
+          <p className="text-[#D9D9D9] mt-2">Video Contest & Voting Platform</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+            <label className="block text-sm font-medium text-[#8F8F8F] mb-1">Email Address</label>
             <input
               type="email"
               required
