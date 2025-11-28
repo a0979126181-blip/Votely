@@ -23,6 +23,19 @@ const initBucket = async () => {
             });
             console.log(`Bucket ${bucketName} created.`);
         }
+
+        // Configure CORS
+        const corsConfiguration = [
+            {
+                maxAgeSeconds: 3600,
+                method: ['PUT', 'GET', 'HEAD', 'DELETE', 'POST', 'OPTIONS'],
+                origin: ['*'],
+                responseHeader: ['Content-Type', 'Access-Control-Allow-Origin', 'x-goog-resumable'],
+            },
+        ];
+        await bucket.setCorsConfiguration(corsConfiguration);
+        console.log('✅ Bucket CORS configured');
+
     } catch (error) {
         console.error('Error initializing Cloud Storage:', error);
         // Fallback to local storage for development
@@ -104,7 +117,7 @@ const deleteVideo = async (videoPath) => {
     }
 };
 
-// Generate Signed URL for direct upload
+// Generate Resumable Upload URL (No special permissions needed)
 const generateUploadUrl = async (filename, contentType) => {
     if (!bucket) {
         throw new Error('GCS bucket not initialized');
@@ -112,12 +125,19 @@ const generateUploadUrl = async (filename, contentType) => {
 
     const options = {
         version: 'v4',
-        action: 'write',
+        action: 'resumable',
         expires: Date.now() + 15 * 60 * 1000, // 15 minutes
         contentType: contentType,
     };
 
-    const [url] = await bucket.file(`videos/${filename}`).getSignedUrl(options);
+    // Use createResumableUpload which is more robust than getSignedUrl for service accounts
+    const [url] = await bucket.file(`videos/${filename}`).createResumableUpload({
+        origin: '*', // Allow all origins for simplicity, or restrict to your domain
+        metadata: {
+            contentType: contentType
+        }
+    });
+
     return url;
 };
 

@@ -48,26 +48,6 @@ app.get('/api/videos', async (req, res) => {
     }
 });
 
-// Get upload URL for direct GCS upload
-app.get('/api/upload-url', async (req, res) => {
-    try {
-        const { filename, contentType } = req.query;
-        if (!filename || !contentType) {
-            return res.status(400).json({ error: 'Missing filename or contentType' });
-        }
-
-        // Make filename unique
-        const ext = path.extname(filename);
-        const uniqueFilename = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}${ext}`;
-
-        const url = await generateUploadUrl(uniqueFilename, contentType);
-        res.json({ url, filename: uniqueFilename });
-    } catch (error) {
-        console.error('Error generating upload URL:', error);
-        res.status(500).json({ error: 'Failed to generate upload URL' });
-    }
-});
-
 // Upload new video (supports both direct GCS upload and multipart upload)
 app.post('/api/videos', (req, res, next) => {
     if (req.is('application/json')) return next();
