@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 
 const db = require('./database');
-const { initBucket, uploadVideo, deleteVideo } = require('./storage');
+const { initBucket, uploadVideo, deleteVideo, generateUploadUrl, getPublicUrl } = require('./storage');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -48,40 +48,87 @@ app.get('/api/videos', async (req, res) => {
     }
 });
 
-// Upload new video
-app.post('/api/videos', upload.single('video'), async (req, res) => {
+// Get upload URL for direct GCS upload
+app.get('/api/upload-url', async (req, res) => {
     try {
-        console.log('📤 Upload request received');
-        console.log('File:', req.file ? 'Present' : 'Missing');
-        console.log('Body:', req.body);
-
-        if (!req.file) {
-            console.error('❌ No file in request');
-            return res.status(400).json({ error: 'No video file provided' });
+        const { filename, contentType } = req.query;
+        if (!filename || !contentType) {
+            return res.status(400).json({ error: 'Missing filename or contentType' });
         }
 
-        const { title, description, uploaderId, uploaderName, thumbnailUrl } = req.body;
+        // Make filename unique
+        const ext = path.extname(filename);
+        const uniqueFilename = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}${ext}`;
+
+        const url = await generateUploadUrl(uniqueFilename, contentType);
+        res.json({ url, filename: uniqueFilename });
+    } catch (error) {
+        console.error('Error generating upload URL:', error);
+        res.status(500).json({ error: 'Failed to generate upload URL' });
+    }
+});
+
+// Upload new video (supports both direct GCS upload and multipart upload)
+app.post('/api/videos', (req, res, next) => {
+    if (req.is('application/json')) return next();
+    upload.single('video')(req, res, next);
+}, async (req, res) => {
+    try {
+        console.log('📤 Upload request received');
+
+        let videoPath;
+        let title, description, uploaderId, uploaderName, thumbnailUrl;
+
+        if (req.is('application/json')) {
+            console.log('Mode: Direct GCS Upload (JSON)');
+            const body = req.body;
+            title = body.title;
+            description = body.description;
+            uploaderId = body.uploaderId;
+            uploaderName = body.uploaderName;
+            thumbnailUrl = body.thumbnailUrl;
+
+            if (!body.videoFilename) {
+                return res.status(400).json({ error: 'Missing videoFilename' });
+            }
+            videoPath = getPublicUrl(body.videoFilename);
+        } else {
+            console.log('Mode: Server Proxy Upload (Multipart)');
+            console.log('File:', req.file ? 'Present' : 'Missing');
+
+            if (!req.file) {
+                console.error('❌ No file in request');
+                return res.status(400).json({ error: 'No video file provided' });
+            }
+
+            const body = req.body;
+            title = body.title;
+            description = body.description;
+            uploaderId = body.uploaderId;
+            uploaderName = body.uploaderName;
+            thumbnailUrl = body.thumbnailUrl;
+
+            // Rename file with unique name
+            const ext = path.extname(req.file.originalname);
+            const filename = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}${ext}`;
+            const tempDir = path.join(__dirname, '../temp');
+            const newPath = path.join(tempDir, filename);
+
+            console.log('📁 Renaming file:', req.file.path, '→', newPath);
+            fs.renameSync(req.file.path, newPath);
+            req.file.path = newPath;
+            req.file.filename = filename;
+
+            // Upload to Cloud Storage
+            console.log('☁️ Uploading to storage...');
+            videoPath = await uploadVideo(req.file);
+            console.log('✅ Upload complete:', videoPath);
+        }
 
         if (!title || !uploaderId || !uploaderName) {
             console.error('❌ Missing required fields:', { title, uploaderId, uploaderName });
             return res.status(400).json({ error: 'Missing required fields' });
         }
-
-        // Rename file with unique name
-        const ext = path.extname(req.file.originalname);
-        const filename = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}${ext}`;
-        const tempDir = path.join(__dirname, '../temp');
-        const newPath = path.join(tempDir, filename);
-
-        console.log('📁 Renaming file:', req.file.path, '→', newPath);
-        fs.renameSync(req.file.path, newPath);
-        req.file.path = newPath;
-        req.file.filename = filename;
-
-        // Upload to Cloud Storage
-        console.log('☁️ Uploading to storage...');
-        const videoPath = await uploadVideo(req.file);
-        console.log('✅ Upload complete:', videoPath);
 
         // Create video record
         const video = {

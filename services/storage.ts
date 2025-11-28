@@ -19,38 +19,61 @@ export const getStoredVideos = async (): Promise<Video[]> => {
 
 export const saveVideo = async (video: Video, file: File): Promise<void> => {
   console.log('🚀 saveVideo called with file:', file.name, file.size, 'bytes');
-  console.log('📝 API_URL:', API_URL);
-  console.log('📦 Video data:', { title: video.title, uploaderId: video.uploaderId, uploaderName: video.uploaderName });
-
-  const formData = new FormData();
-  formData.append('video', file);
-  formData.append('title', video.title);
-  formData.append('description', video.description || '');
-  formData.append('uploaderId', video.uploaderId);
-  formData.append('uploaderName', video.uploaderName);
-  formData.append('thumbnailUrl', video.thumbnailUrl);
-
-  const url = `${API_URL}/api/videos`;
-  console.log('📡 Sending POST to:', url);
 
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      body: formData
+    // 1. Get Upload URL
+    console.log('🔗 Requesting upload URL...');
+    const uploadUrlRes = await fetch(`${API_URL}/api/upload-url?filename=${encodeURIComponent(file.name)}&contentType=${encodeURIComponent(file.type)}`);
+
+    if (!uploadUrlRes.ok) {
+      throw new Error('Failed to get upload URL');
+    }
+
+    const { url: signedUrl, filename: uniqueFilename } = await uploadUrlRes.json();
+    console.log('✅ Got signed URL for:', uniqueFilename);
+
+    // 2. Upload to GCS
+    console.log('☁️ Uploading directly to GCS...');
+    const uploadRes = await fetch(signedUrl, {
+      method: 'PUT',
+      body: file,
+      headers: {
+        'Content-Type': file.type
+      }
     });
 
-    console.log('📬 Response status:', response.status);
+    if (!uploadRes.ok) {
+      throw new Error(`Failed to upload to GCS: ${uploadRes.status}`);
+    }
+    console.log('✅ GCS upload complete');
+
+    // 3. Save metadata
+    console.log('💾 Saving metadata to backend...');
+    const response = await fetch(`${API_URL}/api/videos`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        title: video.title,
+        description: video.description || '',
+        uploaderId: video.uploaderId,
+        uploaderName: video.uploaderName,
+        thumbnailUrl: video.thumbnailUrl,
+        videoFilename: uniqueFilename
+      })
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ Upload failed:', response.status, errorText);
-      throw new Error(`Failed to upload video: ${response.status} - ${errorText}`);
+      throw new Error(`Failed to save video metadata: ${response.status} - ${errorText}`);
     }
 
     const result = await response.json();
-    console.log('✅ Upload successful:', result);
+    console.log('✅ Video saved successfully:', result);
+
   } catch (error) {
-    console.error('❌ Fetch error:', error);
+    console.error('❌ Upload process failed:', error);
     throw error;
   }
 };
