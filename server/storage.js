@@ -25,16 +25,17 @@ const initBucket = async () => {
         }
 
         // Configure CORS
+        // Allow all origins and headers to prevent browser blocking
         const corsConfiguration = [
             {
                 maxAgeSeconds: 3600,
                 method: ['PUT', 'GET', 'HEAD', 'DELETE', 'POST', 'OPTIONS'],
                 origin: ['*'],
-                responseHeader: ['Content-Type', 'Access-Control-Allow-Origin', 'x-goog-resumable'],
+                responseHeader: ['*'], // Allow all response headers
             },
         ];
         await bucket.setCorsConfiguration(corsConfiguration);
-        console.log('✅ Bucket CORS configured');
+        console.log('✅ Bucket CORS configured with permissive policy');
 
     } catch (error) {
         console.error('Error initializing Cloud Storage:', error);
