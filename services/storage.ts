@@ -13,27 +13,53 @@ export const getStoredVideos = async (): Promise<Video[]> => {
   const videos = await response.json();
   return videos.map((v: any) => ({
     ...v,
-    videoUrl: v.videoPath // Use videoPath as videoUrl
+    videoUrl: v.videoPath
   }));
 };
 
 export const saveVideo = async (video: Video, file: File): Promise<void> => {
-  const formData = new FormData();
-  formData.append('video', file);
-  formData.append('title', video.title);
-  formData.append('description', video.description || '');
-  formData.append('uploaderId', video.uploaderId);
-  formData.append('uploaderName', video.uploaderName);
-  formData.append('thumbnailUrl', video.thumbnailUrl || '');
+  // Step 1: Get signed URL from backend
+  const urlResponse = await fetch(
+    `${API_URL}/api/upload-url?filename=${encodeURIComponent(file.name)}&contentType=${encodeURIComponent(file.type)}`
+  );
 
-  const response = await fetch(`${API_URL}/api/videos`, {
-    method: 'POST',
-    body: formData,
+  if (!urlResponse.ok) {
+    throw new Error('Failed to get upload URL');
+  }
+
+  const { url: signedUrl, filename: uniqueFilename } = await urlResponse.json();
+
+  // Step 2: Upload directly to GCS using signed URL
+  const uploadResponse = await fetch(signedUrl, {
+    method: 'PUT',
+    body: file,
+    headers: {
+      'Content-Type': file.type,
+    },
   });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to upload video');
+  if (!uploadResponse.ok) {
+    throw new Error('Failed to upload video to GCS');
+  }
+
+  // Step 3: Save video metadata to backend
+  const metadataResponse = await fetch(`${API_URL}/api/videos`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      title: video.title,
+      description: video.description,
+      uploaderId: video.uploaderId,
+      uploaderName: video.uploaderName,
+      thumbnailUrl: video.thumbnailUrl,
+      videoFilename: uniqueFilename,
+    }),
+  });
+
+  if (!metadataResponse.ok) {
+    throw new Error('Failed to save video metadata');
   }
 };
 
@@ -84,7 +110,6 @@ export const castVote = async (userId: string, videoId: string, userEmail?: stri
     throw new Error('Failed to cast vote');
   }
 
-  // Fetch updated votes
   return getStoredVotes();
 };
 
@@ -97,11 +122,10 @@ export const removeVote = async (userId: string): Promise<VoteMap> => {
     throw new Error('Failed to remove vote');
   }
 
-  // Fetch updated votes
   return getStoredVotes();
 };
 
-// === User Session (still using localStorage) ===
+// === User Session ===
 
 const KEY_USER = 'votely_user';
 

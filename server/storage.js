@@ -118,4 +118,29 @@ const deleteVideo = async (videoPath) => {
     }
 };
 
-module.exports = { initBucket, uploadVideo, deleteVideo };
+// Generate signed URL for direct client upload
+const generateSignedUrl = async (filename, contentType) => {
+    if (!bucket) {
+        throw new Error('GCS bucket not initialized');
+    }
+
+    const file = bucket.file(`videos/${filename}`);
+    const [url] = await file.getSignedUrl({
+        version: 'v4',
+        action: 'write',
+        expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+        contentType: contentType,
+    });
+
+    return url;
+};
+
+// Get public URL for a filename
+const getPublicUrl = (filename) => {
+    if (!bucket) {
+        return `/uploads/${filename}`;
+    }
+    return `https://storage.googleapis.com/${bucketName}/videos/${filename}`;
+};
+
+module.exports = { initBucket, uploadVideo, deleteVideo, generateSignedUrl, getPublicUrl };

@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 
 const db = require('./database');
-const { initBucket, uploadVideo, deleteVideo, generateUploadUrl, getPublicUrl } = require('./storage');
+const { initBucket, uploadVideo, deleteVideo, generateSignedUrl, getPublicUrl } = require('./storage');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -48,7 +48,27 @@ app.get('/api/videos', async (req, res) => {
     }
 });
 
-// Upload new video (server-side upload)
+// Get upload URL for direct GCS upload
+app.get('/api/upload-url', async (req, res) => {
+    try {
+        const { filename, contentType } = req.query;
+        if (!filename || !contentType) {
+            return res.status(400).json({ error: 'Missing filename or contentType' });
+        }
+
+        const ext = path.extname(filename);
+        const uniqueFilename = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}${ext}`;
+
+        const url = await generateSignedUrl(uniqueFilename, contentType);
+
+        res.json({ url, filename: uniqueFilename });
+    } catch (error) {
+        console.error('Error generating upload URL:', error);
+        res.status(500).json({ error: 'Failed to generate upload URL' });
+    }
+});
+
+// Upload new video (supports both direct GCS upload and multipart upload)
 app.post('/api/videos', (req, res, next) => {
     if (req.is('application/json')) return next();
     upload.single('video')(req, res, next);
