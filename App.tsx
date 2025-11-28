@@ -43,14 +43,36 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden px-4">
+      {/* Background Video */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute top-0 left-0 w-full h-full object-cover"
+        style={{
+          position: 'fixed',
+          width: '100vw',
+          height: '100vh',
+          objectFit: 'cover'
+        }}
+      >
+        <source src="/login-background.mp4" type="video/mp4" />
+        {/* Fallback for browsers that don't support video */}
+      </video>
+
+      {/* Dark overlay for better readability */}
+      <div className="absolute inset-0 bg-black/30"></div>
+
+      {/* Login Card with Glassmorphism */}
+      <div className="max-w-md w-full backdrop-blur-xl bg-white/90 rounded-2xl shadow-2xl p-8 border border-white/20 relative z-10">
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4 shadow-red-200 shadow-lg">
             V
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Votely</h1>
-          <p className="text-gray-500 mt-2">Video Contest & Voting Platform</p>
+          <p className="text-gray-600 mt-2">Video Contest & Voting Platform</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
@@ -58,7 +80,7 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
             <input
               type="email"
               required
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all"
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white/80 focus:ring-2 focus:ring-red-500 focus:border-transparent focus:bg-white outline-none transition-all"
               placeholder="name@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
