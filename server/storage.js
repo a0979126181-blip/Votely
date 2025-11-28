@@ -118,36 +118,4 @@ const deleteVideo = async (videoPath) => {
     }
 };
 
-// Generate Resumable Upload URL (No special permissions needed)
-const generateUploadUrl = async (filename, contentType) => {
-    if (!bucket) {
-        throw new Error('GCS bucket not initialized');
-    }
-
-    const options = {
-        version: 'v4',
-        action: 'resumable',
-        expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-        contentType: contentType,
-    };
-
-    // Use createResumableUpload which is more robust than getSignedUrl for service accounts
-    const [url] = await bucket.file(`videos/${filename}`).createResumableUpload({
-        origin: '*', // Allow all origins for simplicity, or restrict to your domain
-        metadata: {
-            contentType: contentType
-        }
-    });
-
-    return url;
-};
-
-// Get public URL for a filename
-const getPublicUrl = (filename) => {
-    if (!bucket) {
-        return `/uploads/${filename}`;
-    }
-    return `https://storage.googleapis.com/${bucketName}/videos/${filename}`;
-};
-
-module.exports = { initBucket, uploadVideo, deleteVideo, generateUploadUrl, getPublicUrl };
+module.exports = { initBucket, uploadVideo, deleteVideo };
