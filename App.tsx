@@ -59,7 +59,7 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
           filter: 'blur(0.5px) brightness(0.6)'
         }}
       >
-        <source src="/login-background.mp4" type="video/mp4" />
+        <source src="/votely_pageVideo.mp4" type="video/mp4" />
         {/* Fallback for browsers that don't support video */}
       </video>
 
