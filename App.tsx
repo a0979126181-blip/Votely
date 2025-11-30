@@ -45,11 +45,10 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden px-4">
       {/* Background Video */}
-      <video
-        autoPlay
-        loop
-        muted
-        playsInline
+      {/* Background Image */}
+      <img
+        src="/votely_test.jpg"
+        alt="Background"
         className="absolute top-0 left-0 w-full h-full object-cover"
         style={{
           position: 'fixed',
@@ -58,10 +57,7 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
           objectFit: 'cover',
           filter: 'blur(0.5px) brightness(0.6)'
         }}
-      >
-        <source src="/votely_pageVideo.mp4" type="video/mp4" />
-        {/* Fallback for browsers that don't support video */}
-      </video>
+      />
 
       {/* Dark overlay for better readability */}
       <div className="absolute inset-0 bg-black/30"></div>
