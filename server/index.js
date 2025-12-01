@@ -68,65 +68,15 @@ app.get('/api/upload-url', async (req, res) => {
     }
 });
 
-// Upload new video (supports both direct GCS upload and multipart upload)
-app.post('/api/videos', (req, res, next) => {
-    if (req.is('application/json')) return next();
-    upload.single('video')(req, res, next);
-}, async (req, res) => {
+// Upload new video (YouTube Link)
+app.post('/api/videos', async (req, res) => {
     try {
-        console.log('📤 Upload request received');
+        console.log('📤 Upload request received (YouTube Mode)');
+        const body = req.body;
+        const { title, description, uploaderId, uploaderName, videoUrl, thumbnailUrl } = body;
 
-        let videoPath;
-        let title, description, uploaderId, uploaderName, thumbnailUrl;
-
-        if (req.is('application/json')) {
-            console.log('Mode: Direct GCS Upload (JSON)');
-            const body = req.body;
-            title = body.title;
-            description = body.description;
-            uploaderId = body.uploaderId;
-            uploaderName = body.uploaderName;
-            thumbnailUrl = body.thumbnailUrl;
-
-            if (!body.videoFilename) {
-                return res.status(400).json({ error: 'Missing videoFilename' });
-            }
-            videoPath = getPublicUrl(body.videoFilename);
-        } else {
-            console.log('Mode: Server Proxy Upload (Multipart)');
-            console.log('File:', req.file ? 'Present' : 'Missing');
-
-            if (!req.file) {
-                console.error('❌ No file in request');
-                return res.status(400).json({ error: 'No video file provided' });
-            }
-
-            const body = req.body;
-            title = body.title;
-            description = body.description;
-            uploaderId = body.uploaderId;
-            uploaderName = body.uploaderName;
-            thumbnailUrl = body.thumbnailUrl;
-
-            // Rename file with unique name
-            const ext = path.extname(req.file.originalname);
-            const filename = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}${ext}`;
-            const tempDir = path.join(__dirname, '../temp');
-            const newPath = path.join(tempDir, filename);
-
-            console.log('📁 Renaming file:', req.file.path, '→', newPath);
-            fs.renameSync(req.file.path, newPath);
-            req.file.path = newPath;
-            req.file.filename = filename;
-
-            // Upload to Cloud Storage
-            console.log('☁️ Uploading to storage...');
-            videoPath = await uploadVideo(req.file);
-            console.log('✅ Upload complete:', videoPath);
-        }
-
-        if (!title || !uploaderId || !uploaderName) {
-            console.error('❌ Missing required fields:', { title, uploaderId, uploaderName });
+        if (!title || !uploaderId || !uploaderName || !videoUrl || !thumbnailUrl) {
+            console.error('❌ Missing required fields:', { title, uploaderId, uploaderName, videoUrl });
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
@@ -135,8 +85,8 @@ app.post('/api/videos', (req, res, next) => {
             id: `v-${Date.now()}`,
             title,
             description: description || '',
-            videoPath,
-            thumbnailUrl: thumbnailUrl || '',
+            videoPath: videoUrl, // Store YouTube URL directly
+            thumbnailUrl: thumbnailUrl, // Store YouTube Thumbnail URL
             uploaderId,
             uploaderName,
             createdAt: Date.now(),
@@ -146,14 +96,9 @@ app.post('/api/videos', (req, res, next) => {
         await db.createVideo(video);
         console.log('💾 Video saved to database:', video.id);
 
-        // Return video with full URL
-        res.json({
-            ...video,
-            videoUrl: videoPath
-        });
+        res.json(video);
     } catch (error) {
         console.error('❌ Error uploading video:', error);
-        console.error('Stack:', error.stack);
         res.status(500).json({ error: 'Failed to upload video', details: error.message });
     }
 });

@@ -17,33 +17,11 @@ export const getStoredVideos = async (): Promise<Video[]> => {
   }));
 };
 
-export const saveVideo = async (video: Video, file: File): Promise<void> => {
-  // Step 1: Get signed URL from backend
-  const urlResponse = await fetch(
-    `${API_URL}/api/upload-url?filename=${encodeURIComponent(file.name)}&contentType=${encodeURIComponent(file.type)}`
-  );
+export const saveVideo = async (video: Video, file: File | null): Promise<void> => {
+  // For YouTube integration, we only send metadata to the backend
+  // We don't need to upload any files or get signed URLs anymore
 
-  if (!urlResponse.ok) {
-    throw new Error('Failed to get upload URL');
-  }
-
-  const { url: signedUrl, filename: uniqueFilename } = await urlResponse.json();
-
-  // Step 2: Upload directly to GCS using signed URL
-  const uploadResponse = await fetch(signedUrl, {
-    method: 'PUT',
-    body: file,
-    headers: {
-      'Content-Type': file.type,
-    },
-  });
-
-  if (!uploadResponse.ok) {
-    throw new Error('Failed to upload video to GCS');
-  }
-
-  // Step 3: Save video metadata to backend
-  const metadataResponse = await fetch(`${API_URL}/api/videos`, {
+  const response = await fetch(`${API_URL}/api/videos`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -53,12 +31,12 @@ export const saveVideo = async (video: Video, file: File): Promise<void> => {
       description: video.description,
       uploaderId: video.uploaderId,
       uploaderName: video.uploaderName,
-      thumbnailUrl: video.thumbnailUrl,
-      videoFilename: uniqueFilename,
+      videoUrl: video.videoUrl, // This is now the YouTube URL
+      thumbnailUrl: video.thumbnailUrl, // This is the YouTube thumbnail URL
     }),
   });
 
-  if (!metadataResponse.ok) {
+  if (!response.ok) {
     throw new Error('Failed to save video metadata');
   }
 };

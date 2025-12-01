@@ -17,7 +17,7 @@ import {
 import { Navbar } from './components/Navbar';
 import { VideoGridItem } from './components/VideoGridItem';
 import { Button } from './components/Button';
-import { Heart, Upload as UploadIcon, Video as VideoIcon, Lock, BarChart3, ArrowLeft, Users, Trash2, AlertTriangle, Eye, EyeOff, Archive } from 'lucide-react';
+import { Heart, Upload as UploadIcon, Video as VideoIcon, Lock, BarChart3, ArrowLeft, Users, Trash2, AlertTriangle, Eye, EyeOff, Archive, Play } from 'lucide-react';
 
 // --- Sub-Components ---
 
@@ -92,95 +92,48 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
   );
 };
 
+// Helper to extract YouTube ID
+const getYouTubeId = (url: string) => {
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+};
+
+const getYouTubeThumbnail = (id: string) => `https://img.youtube.com/vi/${id}/mqdefault.jpg`;
+
 // 2. Upload Component
 const UploadScreen: React.FC<{
   user: User,
   onCancel: () => void,
-  onSuccess: (video: Video, file: File) => void
+  onSuccess: (video: Video, file: File | null) => void // file is now optional/null
 }> = ({ user, onCancel, onSuccess }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const selectedFile = e.target.files[0];
-      setFile(selectedFile);
-      setPreviewUrl(URL.createObjectURL(selectedFile));
-    }
-  };
-
-  const generateThumbnail = (videoFile: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const video = document.createElement('video');
-      video.preload = 'metadata';
-      video.muted = true;
-      video.playsInline = true;
-
-      const cleanup = () => {
-        if (video.src) URL.revokeObjectURL(video.src);
-        video.remove();
-      };
-
-      video.onloadedmetadata = () => {
-        if (video.duration && Number.isFinite(video.duration)) {
-          video.currentTime = video.duration / 2;
-        } else {
-          video.currentTime = 1;
-        }
-      };
-
-      video.onseeked = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 480;
-          const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
-
-          canvas.width = video.videoWidth * scale;
-          canvas.height = video.videoHeight * scale;
-
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-            resolve(dataUrl);
-          } else {
-            resolve(`https://picsum.photos/seed/${Date.now()}/400/600`);
-          }
-        } catch (e) {
-          console.error("Error generating thumbnail:", e);
-          resolve(`https://picsum.photos/seed/${Date.now()}/400/600`);
-        } finally {
-          cleanup();
-        }
-      };
-
-      video.onerror = () => {
-        console.error("Video load error");
-        cleanup();
-        resolve(`https://picsum.photos/seed/${Date.now()}/400/600`);
-      };
-
-      video.src = URL.createObjectURL(videoFile);
-    });
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const url = e.target.value;
+    setYoutubeUrl(url);
+    const id = getYouTubeId(url);
+    setPreviewId(id);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !file) return;
+    if (!title || !previewId) return;
 
     setIsSubmitting(true);
 
     try {
-      const thumb = await generateThumbnail(file);
+      const thumb = getYouTubeThumbnail(previewId);
 
       const newVideo: Video = {
         id: `v-${Date.now()}`,
         title,
         description,
-        videoUrl: URL.createObjectURL(file), // Temporary URL for immediate display
+        videoUrl: youtubeUrl, // Store full YouTube URL
         thumbnailUrl: thumb,
         uploaderId: user.id,
         uploaderName: user.name,
@@ -188,7 +141,8 @@ const UploadScreen: React.FC<{
         isHidden: false
       };
 
-      onSuccess(newVideo, file);
+      // Pass null for file since we are not uploading files anymore
+      onSuccess(newVideo, null);
     } catch (error) {
       console.error("Upload failed", error);
       setIsSubmitting(false);
@@ -199,43 +153,44 @@ const UploadScreen: React.FC<{
     <div className="max-w-2xl mx-auto py-8 px-4">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 md:p-8">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">Upload Your Video</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Submit YouTube Video</h2>
           <button onClick={onCancel} className="text-gray-500 hover:text-gray-700">Cancel</button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">Video File</label>
-            <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${previewUrl ? 'border-red-200 bg-red-50' : 'border-gray-300 hover:border-gray-400'}`}>
-              {previewUrl ? (
-                <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
-                  <video src={previewUrl} controls className="w-full h-full" />
-                  <button
-                    type="button"
-                    onClick={() => { setFile(null); setPreviewUrl(null); }}
-                    className="absolute top-2 right-2 bg-white/80 p-1 rounded-full hover:bg-white text-red-600"
-                  >
-                    <UploadIcon size={16} />
-                  </button>
-                </div>
-              ) : (
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={handleFileChange}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                  <div className="flex flex-col items-center pointer-events-none">
-                    <div className="p-3 bg-gray-100 rounded-full mb-3">
-                      <VideoIcon className="w-6 h-6 text-gray-500" />
-                    </div>
-                    <p className="text-sm font-medium text-gray-900">Select video file</p>
-                    <p className="text-xs text-gray-500 mt-1">MP4, WebM</p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">YouTube Link</label>
+            <input
+              type="text"
+              required
+              value={youtubeUrl}
+              onChange={handleUrlChange}
+              className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-red-500 outline-none"
+              placeholder="https://www.youtube.com/watch?v=..."
+            />
+          </div>
+
+          {/* Preview Area */}
+          <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${previewId ? 'border-red-200 bg-red-50' : 'border-gray-300 bg-gray-50'}`}>
+            {previewId ? (
+              <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden shadow-lg">
+                <img
+                  src={getYouTubeThumbnail(previewId)}
+                  alt="Preview"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                  <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-lg">
+                    <Play size={24} fill="white" className="text-white ml-1" />
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center py-8 text-gray-400">
+                <VideoIcon className="w-12 h-12 mb-2" />
+                <p>Paste a YouTube link to preview</p>
+              </div>
+            )}
           </div>
 
           <div>
@@ -262,8 +217,8 @@ const UploadScreen: React.FC<{
           </div>
 
           <div className="pt-4">
-            <Button type="submit" fullWidth disabled={!file || !title || isSubmitting}>
-              {isSubmitting ? 'Processing...' : 'Upload Video'}
+            <Button type="submit" fullWidth disabled={!previewId || !title || isSubmitting}>
+              {isSubmitting ? 'Processing...' : 'Submit Video'}
             </Button>
           </div>
         </form>
@@ -285,6 +240,7 @@ const VideoDetail: React.FC<{
 
   const canAdmin = currentUser.isAdmin;
   const canDelete = canAdmin;
+  const youtubeId = getYouTubeId(video.videoUrl);
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 animate-in fade-in duration-300">
@@ -307,13 +263,19 @@ const VideoDetail: React.FC<{
         {/* Left: Player */}
         <div className="lg:col-span-2">
           <div className="bg-black rounded-2xl overflow-hidden shadow-xl aspect-video relative group">
-            <video
-              src={video.videoUrl}
-              controls
-              autoPlay
-              className="w-full h-full"
-              poster={video.thumbnailUrl}
-            />
+            {youtubeId ? (
+              <iframe
+                src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0`}
+                title={video.title}
+                className="w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-white">
+                <p>Invalid Video URL</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -653,8 +615,9 @@ const App: React.FC = () => {
     setView('VIDEO_DETAIL');
   };
 
-  const handleUploadSuccess = async (newVideo: Video, file: File) => {
+  const handleUploadSuccess = async (newVideo: Video, file: File | null) => {
     try {
+      // For YouTube, we just save the metadata directly
       await saveVideo(newVideo, file);
       await refreshData();
       setView('DASHBOARD');
