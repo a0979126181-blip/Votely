@@ -11,10 +11,10 @@ interface NavbarProps {
   onAdminClick: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ 
-  user, 
-  onLogout, 
-  onUploadClick, 
+export const Navbar: React.FC<NavbarProps> = ({
+  user,
+  onLogout,
+  onUploadClick,
   onDashboardClick,
   onAdminClick
 }) => {
@@ -62,15 +62,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="hidden md:inline">Feed</span>
           </Button>
 
-          {/* Create Button */}
-          <Button variant="secondary" onClick={onUploadClick} className="flex items-center gap-2">
+          {/* Create Button - Hidden as per request */}
+          {/* <Button variant="secondary" onClick={onUploadClick} className="flex items-center gap-2">
             <Plus size={18} />
             <span className="hidden md:inline">Create</span>
-          </Button>
+          </Button> */}
 
           {/* User Avatar Dropdown */}
           <div className="relative" ref={dropdownRef}>
-            <button 
+            <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className="flex items-center gap-2 focus:outline-none group"
             >
@@ -82,7 +82,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Dropdown Menu */}
             {isDropdownOpen && (
               <div className="absolute right-0 mt-2 w-60 bg-white rounded-xl shadow-xl border border-gray-100 py-2 animate-in fade-in zoom-in-95 duration-200 transform origin-top-right z-50">
-                
+
                 {/* User Header */}
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-bold text-gray-900 truncate">{user.name}</p>
@@ -92,19 +92,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {/* Menu Items */}
                 <div className="py-1">
                   {user.isAdmin && (
-                     <button 
-                        onClick={() => {
-                            onAdminClick();
-                            setIsDropdownOpen(false);
-                        }}
-                        className="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2 sm:hidden"
-                      >
-                        <Shield size={16} />
-                        Admin Dashboard
-                      </button>
+                    <button
+                      onClick={() => {
+                        onAdminClick();
+                        setIsDropdownOpen(false);
+                      }}
+                      className="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2 sm:hidden"
+                    >
+                      <Shield size={16} />
+                      Admin Dashboard
+                    </button>
                   )}
-                  
-                  <button 
+
+                  <button
                     onClick={() => {
                       alert("Settings feature coming soon!");
                       setIsDropdownOpen(false);
@@ -117,7 +117,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
 
                 <div className="border-t border-gray-100 py-1">
-                  <button 
+                  <button
                     onClick={onLogout}
                     className="w-full px-4 py-2 text-sm text-left text-red-600 hover:bg-red-50 flex items-center gap-2"
                   >
